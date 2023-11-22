@@ -1,0 +1,144 @@
+;; Base definitions
+
+cln     =  exp *(nl exp)
+
+exp-end =  ws [ comment ]
+exp     =  exp-end
+exp     =/ ws node *(nl map) exp-end
+
+;; Whitespace
+
+ws = *(
+  %x20 / ; Space
+  %x09 / ; Horizontal tab
+  %x0A /
+  %x0D
+)
+
+;; Newline
+
+nl = %x0A / %x0D.0A ; LF / CRLF
+
+;; Comment
+
+comment       = comment-start *non-eol
+
+comment-start = %x23 ; #
+non-ascii     = %x80-D7FF / %xE000-10FFFF
+non-eol       = %x09 / %x20-7E / non-ascii
+
+;; Key
+
+key               =  quoted-key / unquoted-key
+
+; TOML abnf
+quoted-key        =  string
+unquoted-key      =  1*unquoted-key-char
+unquoted-key-char =  ALPHA / DIGIT / %x2D / %x5F        ; a-z A-Z 0-9 - _
+unquoted-key-char =/ %xB2 / %xB3 / %xB9 / %xBC-BE       ; superscript digits, fractions
+unquoted-key-char =/ %xC0-D6 / %xD8-F6 / %xF8-37D       ; non-symbol chars in Latin block
+unquoted-key-char =/ %x37F-1FFF                         ; exclude GREEK QUESTION MARK, which is basically a semi-colon
+unquoted-key-char =/ %x200C-200D / %x203F-2040          ; from General Punctuation Block, include the two tie symbols and ZWNJ, ZWJ
+unquoted-key-char =/ %x2070-218F / %x2460-24FF          ; include super-/subscripts, letterlike/numberlike forms, enclosed alphanumerics
+unquoted-key-char =/ %x2C00-2FEF / %x3001-D7FF          ; skip arrows, math, box drawing etc, skip 2FF0-3000 ideographic up/down markers and spaces
+unquoted-key-char =/ %xF900-FDCF / %xFDF0-FFFD          ; skip D800-DFFF surrogate block, E000-F8FF Private Use area, FDD0-FDEF intended for process-internal use (unicode)
+unquoted-key-char =/ %x10000-EFFFF                      ; all chars outside BMP range, excluding Private Use planes (F0000-10FFFF)
+
+;; Value
+
+value =  map
+value =/ array
+value =/ ml-string
+value =/ key
+value =/ number
+value =/ number-array
+
+;; Strings and chars
+
+string    = qm *char qm
+
+
+; TOML abnf
+ml-string = ml-qm [nl] ml-body ml-qm
+ml-qm     = 3qm
+ml-body   = *mlb-content *( mlb-quotes 1*mlb-content ) [ mlb-quotes ]
+
+mlb-content = char / nl / mlb-escaped-nl
+mlb-quotes = 1*2qm
+mlb-escaped-nl = escape ws nl *( ws / nl )
+
+qm        = %x22 ; "
+unescaped = %x20-21 / %x23-5B / %x5D-10FFFF
+escape    = %x5C ; \
+
+char      = unescaped / 
+  escape (
+    %x22 /         ; "    quotation mark  U+0022
+    %x5C /         ; \    reverse solidus U+005C
+    %x62 /         ; b    backspace       U+0008
+    %x65 /         ; e    escape          U+001B
+    %x66 /         ; f    form feed       U+000C
+    %x6E /         ; n    line feed       U+000A
+    %x72 /         ; r    carriage return U+000D
+    %x74 /         ; t    tab             U+0009
+    %x78 2HEXDIG / ; xHH                  U+00HH
+    %x75 4HEXDIG / ; uHHHH                U+HHHH
+    %x55 8HEXDIG   ; UHHHHHHHH            U+HHHHHHHH
+  )
+
+;; Numbers
+
+number = int / float
+
+tick    = %x27 ; '
+plus    = %x2B ; +
+minus   = %x2D ; -
+decimal = %x2E ; .
+
+int-keyword   = tick %x69.6E.74       ; 'int
+float-keyword = tick %x66.6C.6F.61.74 ; 'float
+
+int   = int-keyword ws [ minus / plus ] 1*DIGIT
+float = float-keyword ws [ minus / plus ] 1*DIGIT decimal 1*DIGIT 
+
+;; Separators
+
+ns = ws (%x3A / %x3D) ws  ; : / =
+vs = ws %x2C ws           ; ,
+
+;; Node [node]
+
+node       = node-start key node-end
+
+node-start = %x5B ws ; [
+node-end   = ws %x5D ; ]
+
+;; Map {}
+
+map = map-start [ member *(vs member) ] map-end
+
+map-start = ws %x7B ws ; {
+map-end   = ws %x7D ws ; }
+
+member = key ns value
+
+;; Array []
+
+array = array-start [ value *(vs value) ] array-end
+
+array-start = ws %x5B ws  ; [
+array-end   = ws %x5D ws  ; ]
+
+;; Number array 'number []
+
+number-array = int-array / float-array
+
+int-array = int-keyword array-start [ int-value *(vs int-value) ] array-end
+int-value = [ minus / plus ] 1*DIGIT
+
+float-array = float-keyword array-start [ float-value *(vs float-value) ] array-end
+float-value = [ minus / plus ] 1*DIGIT decimal 1*DIGIT
+
+
+ALPHA = %x41-5A / %x61-7A ; A-Z / a-z
+DIGIT = %x30-39           ; 0-9
