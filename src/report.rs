@@ -1,14 +1,13 @@
 use crate::position::Position;
+use strum_macros::Display;
 
+#[derive(Display)]
 pub enum ReportErrorKind {
     UnableToParseError,
     UnkownTokenError,
-}
-
-impl std::fmt::Display for ReportErrorKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
-    }
+    InternalLexerError,
+    MismatchedClosingHousingError,
+    UnexpectedClosingHousingError,
 }
 
 pub struct Report {
@@ -31,7 +30,7 @@ impl std::fmt::Display for Report {
                 write!(
                     f,
                     "On Line {} at char {}: {} -- {}",
-                    pos.line, pos.char, self.kind, self.msg
+                    pos.line, pos.column, self.kind, self.msg
                 )
             }
             None => write!(f, "{} -- {}", self.kind, self.msg),

@@ -1,5 +1,5 @@
 [package]
-name = "abnf-tooling-kit"
+name = "abnf-toolkit"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.4.8", features = ["derive"] }
 substring = "1.4.5"
+strum = { version = "0.25", features = ["derive"] }
+strum_macros = "0.25"
