@@ -9,7 +9,7 @@ impl Position {
     pub fn new() -> Self {
         Position {
             line: 1,
-            column: 0,
+            column: 1,
             offset: 0,
         }
     }

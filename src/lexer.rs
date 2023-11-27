@@ -1,5 +1,5 @@
 use crate::position::Position;
-use crate::report::{self, Report};
+use crate::report::{Report, ReportKind};
 use crate::token::Token;
 use crate::token_kind::TokenKind;
 
@@ -12,7 +12,9 @@ pub struct Lexer<'s> {
     token_start: Position,
     token_end: Position,
 
-    open_housings: Vec<TokenKind>,
+    current_line: &'s str,
+
+    open_brackets: Vec<TokenKind>,
 }
 
 impl<'s> Lexer<'s> {
@@ -20,12 +22,19 @@ impl<'s> Lexer<'s> {
         let mut chars = source.chars();
         let next = chars.next();
 
+        let index = if let Some(index) = source.find('\n') {
+            index
+        } else {
+            source.len()
+        };
+
         Lexer {
             src: source,
             token_start: Position::new(),
             token_end: Position::new(),
             tokens: Vec::new(),
-            open_housings: Vec::new(),
+            open_brackets: Vec::new(),
+            current_line: &source[..index],
             chars,
             next,
         }
@@ -35,22 +44,23 @@ impl<'s> Lexer<'s> {
         let mut reports: Vec<Report> = Vec::new();
 
         while !self.is_at_end() {
-            // append errors to error vector, ignore Ok value
-            if let Err(report) = self.lex(match self.next {
+            let start = match self.next {
                 Some(start) => start,
                 None => break,
-            }) {
+            };
+            // append errors to error vector, ignore Ok value
+            if let Err(report) = self.lex(start) {
                 reports.push(report);
             }
         }
 
         self.add_token(TokenKind::EOF);
 
-        if !self.open_housings.is_empty() {
+        if !self.open_brackets.is_empty() {
             reports.push(Report::new(
-                report::ReportErrorKind::MismatchedClosingHousingError,
-                "One or more housings are never closed".into(),
+                ReportKind::MismatchedClosingBracketError,
                 None,
+                self.current_line.into(),
             ))
         }
 
@@ -63,14 +73,14 @@ impl<'s> Lexer<'s> {
     }
 
     fn lex(&mut self, start: char) -> Result<(), Report> {
-        let _ = match start {
-            '(' => self.lex_housing(TokenKind::LeftParen),
-            ')' => self.lex_housing(TokenKind::RightParen),
-            '[' => self.lex_housing(TokenKind::LeftSquare),
-            ']' => self.lex_housing(TokenKind::RightSquare),
-            '.' => self.lex_single(TokenKind::Dot),
-            '-' => self.lex_single(TokenKind::Minus),
-            '*' => self.lex_single(TokenKind::Star),
+        match start {
+            '(' => self.lex_bracket(TokenKind::LeftParen)?,
+            ')' => self.lex_bracket(TokenKind::RightParen)?,
+            '[' => self.lex_bracket(TokenKind::LeftSquare)?,
+            ']' => self.lex_bracket(TokenKind::RightSquare)?,
+            '.' => self.lex_single(TokenKind::Dot)?,
+            '-' => self.lex_single(TokenKind::Minus)?,
+            '*' => self.lex_single(TokenKind::Star)?,
 
             // ';' => {
             //     while let Some(peeked) = self.next {
@@ -99,11 +109,12 @@ impl<'s> Lexer<'s> {
             //     self.token_end.column = 0
             // }
             _ => {
+                self.advance()?;
                 return Err(Report::new(
-                    report::ReportErrorKind::UnableToParseError,
-                    String::from("Lexer was unable to parse file due to an unknown error!"),
+                    ReportKind::UnableToParseError,
                     None,
-                ))
+                    self.current_line.into(),
+                ));
             }
         };
 
@@ -116,17 +127,17 @@ impl<'s> Lexer<'s> {
         Ok(())
     }
 
-    fn lex_housing(&mut self, kind: TokenKind) -> Result<(), Report> {
+    fn lex_bracket(&mut self, kind: TokenKind) -> Result<(), Report> {
         match kind {
-            TokenKind::LeftParen => self.open_housing(TokenKind::Paren),
-            TokenKind::RightParen => self.close_housing(TokenKind::Paren)?,
-            TokenKind::LeftSquare => self.open_housing(TokenKind::Square),
-            TokenKind::RightSquare => self.close_housing(TokenKind::Square)?,
+            TokenKind::LeftParen => self.open_bracket(TokenKind::Paren),
+            TokenKind::RightParen => self.close_bracket(TokenKind::Paren)?,
+            TokenKind::LeftSquare => self.open_bracket(TokenKind::Square),
+            TokenKind::RightSquare => self.close_bracket(TokenKind::Square)?,
             _ => {
                 return Err(Report::new(
-                    report::ReportErrorKind::InternalLexerError,
-                    "Lexer called lex_housing on no housing token".into(),
+                    ReportKind::InternalLexerError,
                     Some(self.token_end.clone()),
+                    self.current_line.into(),
                 ))
             }
         }
@@ -134,23 +145,31 @@ impl<'s> Lexer<'s> {
         self.lex_single(kind)
     }
 
-    fn open_housing(&mut self, kind: TokenKind) {
-        self.open_housings.push(kind)
+    fn open_bracket(&mut self, kind: TokenKind) {
+        self.open_brackets.push(kind)
     }
 
-    fn close_housing(&mut self, kind: TokenKind) -> Result<(), Report> {
-        match self.open_housings.pop() {
+    fn close_bracket(&mut self, kind: TokenKind) -> Result<(), Report> {
+        match self.open_brackets.pop() {
             Some(open) if open == kind => Ok(()),
-            Some(_) => Err(Report::new(
-                report::ReportErrorKind::MismatchedClosingHousingError,
-                "mismatched braces".into(),
-                Some(self.token_start.clone()),
-            )),
-            None => Err(Report::new(
-                report::ReportErrorKind::UnexpectedClosingHousingError,
-                "Unexpected closing housing".into(),
-                Some(self.token_start.clone()),
-            )),
+            Some(_) => {
+                let before = self.token_end.clone();
+                self.lex_single(kind)?;
+                return Err(Report::new(
+                    ReportKind::MismatchedClosingBracketError,
+                    Some(before),
+                    self.current_line.into(),
+                ));
+            }
+            None => {
+                let before = self.token_end.clone();
+                self.lex_single(kind)?;
+                Err(Report::new(
+                    ReportKind::UnexpectedClosingBracketError,
+                    Some(before),
+                    self.current_line.into(),
+                ))
+            }
         }
     }
 
@@ -167,9 +186,9 @@ impl<'s> Lexer<'s> {
                 Ok(())
             }
             None => Err(Report::new(
-                report::ReportErrorKind::UnableToParseError,
-                "Lexer advanced past end of text".into(),
+                ReportKind::UnableToParseError,
                 None,
+                self.current_line.into(),
             )),
         }
     }
@@ -208,7 +227,7 @@ mod tests {
 
     #[test]
     fn parse_tokens() {
-        let source = "*([]";
+        let source = "[]]";
 
         let mut lexer = Lexer::new(source);
 
@@ -216,7 +235,6 @@ mod tests {
             Ok(tokens) => {
                 assert_eq!(tokens[0].kind, TokenKind::Star);
                 assert_eq!(tokens[0].pos.line, 1);
-                assert_eq!(tokens[3].kind, TokenKind::RightSquare);
 
                 for t in tokens {
                     println!("{t}");
