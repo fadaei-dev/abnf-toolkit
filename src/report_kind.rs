@@ -13,6 +13,7 @@ pub enum ReportKind {
 
     // terminal errors
     NoTerminalFoundError,
+    IncorrectTerminalFoundError,
 }
 
 impl ReportKind {
@@ -26,7 +27,9 @@ impl ReportKind {
             MismatchedClosingBracketError => "one or more brackets are never closed",
             UnexpectedClosingBracketError => "unexpected closing bracket",
             UnclosedBracketError => "one or more brackets are never closed",
-            NoTerminalFoundError => "expected terminal (b, d, x) after %, none found"
+            NoTerminalFoundError => "expected terminal (b, d, x) after %, found none",
+            IncorrectTerminalFoundError => "expected terminal (b, d, x) after %",
         }
     }
 }
+

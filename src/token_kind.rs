@@ -15,6 +15,9 @@ pub enum TokenKind {
     Square,
     LeftSquare,
     RightSquare,
+    Angle,
+    LeftAngle,
+    RightAngle,
 
     // two character tokens
     EqualSlash,
@@ -22,6 +25,7 @@ pub enum TokenKind {
     // Mods
     TerminalBinary,
     TerminalDecimal,
+    Decimal,
     TerminalHexadecimal,
 
     // Literal TokenTypes
@@ -31,5 +35,6 @@ pub enum TokenKind {
 
     // Keywords *Appendix B*
     // todo
+    Whitespace,
     EOF,
 }

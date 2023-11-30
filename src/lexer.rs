@@ -83,6 +83,8 @@ impl<'s> Lexer<'s> {
             ')' => self.lex_bracket(TokenKind::RightParen)?,
             '[' => self.lex_bracket(TokenKind::LeftSquare)?,
             ']' => self.lex_bracket(TokenKind::RightSquare)?,
+            '<' => self.lex_bracket(TokenKind::LeftAngle)?,
+            '>' => self.lex_bracket(TokenKind::RightAngle)?,
 
             '.' => self.lex_single(TokenKind::Dot)?,
             '-' => self.lex_single(TokenKind::Range)?,
@@ -92,6 +94,7 @@ impl<'s> Lexer<'s> {
             '=' => self.lex_assignment()?,
             ';' => self.lex_comment()?,
             '%' => self.lex_terminal()?,
+            '"' => self.lex_string()?,
 
             ' ' | '\t' => self.lex_whitespace()?,
             '\n' | '\r' => self.lex_eol()?,
@@ -107,6 +110,10 @@ impl<'s> Lexer<'s> {
         };
 
         Ok(())
+    }
+
+    fn lex_string(&mut self) -> LexResult<()> {
+        todo!()
     }
 
     fn lex_single(&mut self, kind: TokenKind) -> LexResult<()> {
@@ -130,17 +137,59 @@ impl<'s> Lexer<'s> {
                 'b' => TokenKind::TerminalBinary,
                 'd' => TokenKind::TerminalDecimal,
                 'x' => TokenKind::TerminalHexadecimal,
-                _ => {
+                ' ' | '\t' => {
                     return Err(Report::new(
                         ReportKind::NoTerminalFoundError,
-                        None,
+                        Some(self.token_end.clone()),
+                        self.current_line.into(),
+                    ))
+                }
+                _ => {
+                    return Err(Report::new(
+                        ReportKind::IncorrectTerminalFoundError,
+                        Some(self.token_end.clone()),
                         self.current_line.into(),
                     ))
                 }
             },
         };
 
-        self.lex_single(terminal)
+        self.lex_single(terminal.clone())?;
+
+        match terminal {
+            TokenKind::TerminalBinary => todo!(),
+            TokenKind::TerminalDecimal => self.lex_terminal_decimal()?,
+            TokenKind::TerminalHexadecimal => todo!(),
+            _ => (),
+        };
+
+        Ok(())
+    }
+
+    fn lex_terminal_binary(&mut self) -> LexResult<()> {
+        todo!()
+    }
+
+    // TODO: in parser check lexeme to be in range 0..=127
+    fn lex_terminal_decimal(&mut self) -> LexResult<()> {
+        self.advance()?;
+
+        while let Some(peeked) = self.next {
+            if peeked != '\n'
+                && peeked != '.'
+                && peeked != ' '
+                && peeked != '\t'
+                && !self.is_at_end()
+            {
+                self.advance()?;
+            } else {
+                break;
+            }
+        }
+
+        self.add_token(TokenKind::Decimal);
+
+        Ok(())
     }
 
     fn lex_assignment(&mut self) -> LexResult<()> {
@@ -204,8 +253,7 @@ impl<'s> Lexer<'s> {
             self.advance()?;
         }
 
-        // flush token start
-        self.token_start = self.token_end.clone();
+        self.add_token(TokenKind::Whitespace);
 
         Ok(())
     }
@@ -216,6 +264,8 @@ impl<'s> Lexer<'s> {
             TokenKind::RightParen => self.close_bracket(TokenKind::Paren)?,
             TokenKind::LeftSquare => self.open_bracket(TokenKind::Square),
             TokenKind::RightSquare => self.close_bracket(TokenKind::Square)?,
+            TokenKind::LeftAngle => self.open_bracket(TokenKind::Angle),
+            TokenKind::RightAngle => self.close_bracket(TokenKind::Angle)?,
             _ => {
                 return Err(Report::new(
                     ReportKind::InternalLexerError,
@@ -323,7 +373,7 @@ mod tests {
 
     #[test]
     fn parse_tokens() {
-        let source = "* %";
+        let source = "*  %d45 %d66.%d99 %d606\t";
 
         let mut lexer = Lexer::new(source);
 
