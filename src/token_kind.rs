@@ -6,7 +6,7 @@ pub enum TokenKind {
     Dot,
     Star,
     Mod,
-    Minus,
+    Range,
     Slash,
 
     Paren,
