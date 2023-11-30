@@ -3,6 +3,8 @@ use crate::report::{Report, ReportKind};
 use crate::token::Token;
 use crate::token_kind::TokenKind;
 
+type LexResult<T> = Result<T, Report>;
+
 pub struct Lexer<'s> {
     src: &'s str,
     chars: std::str::Chars<'s>,
@@ -22,6 +24,7 @@ impl<'s> Lexer<'s> {
         let mut chars = source.chars();
         let next = chars.next();
 
+        // grab current line, if no \n grab whole file
         let index = if let Some(index) = source.find('\n') {
             index
         } else {
@@ -56,9 +59,10 @@ impl<'s> Lexer<'s> {
 
         self.add_token(TokenKind::EOF);
 
+        // check for unclosed brackets
         if !self.open_brackets.is_empty() {
             reports.push(Report::new(
-                ReportKind::MismatchedClosingBracketError,
+                ReportKind::UnclosedBracketError,
                 None,
                 self.current_line.into(),
             ))
@@ -72,44 +76,26 @@ impl<'s> Lexer<'s> {
         Ok(self.tokens.clone())
     }
 
-    fn lex(&mut self, start: char) -> Result<(), Report> {
+    fn lex(&mut self, start: char) -> LexResult<()> {
         match start {
             '(' => self.lex_bracket(TokenKind::LeftParen)?,
             ')' => self.lex_bracket(TokenKind::RightParen)?,
             '[' => self.lex_bracket(TokenKind::LeftSquare)?,
             ']' => self.lex_bracket(TokenKind::RightSquare)?,
+            
             '.' => self.lex_single(TokenKind::Dot)?,
             '-' => self.lex_single(TokenKind::Minus)?,
             '*' => self.lex_single(TokenKind::Star)?,
+            '/' => self.lex_single(TokenKind::Slash)?,
 
-            // ';' => {
-            //     while let Some(peeked) = self.next {
-            //         if peeked != '\n' && !self.is_at_end() {
-            //             self.advance();
-            //         } else {
-            //             break;
-            //         }
-            //     }
-            // }
+            '=' => self.lex_assignment()?,
+            ';' => self.lex_comment()?,
 
-            // '=' => {
-            //     let token = if self.if_match_advance('/') {
-            //         TokenKind::EqualSlash
-            //     } else {
-            //         TokenKind::Equal
-            //     };
-            //
-            //     self.add_token(token)
-            // }
+            ' ' | '\t' => self.lex_whitespace()?,
+            '\n' | '\r' => self.lex_eol()?,
 
-            // special characters
-            // ' ' | '\r' | '\t' => (),
-            // '\n' => {
-            //     self.token_end.line += 1;
-            //     self.token_end.column = 0
-            // }
             _ => {
-                self.advance()?;
+                self.advance()?; // continue lexing
                 return Err(Report::new(
                     ReportKind::UnableToParseError,
                     None,
@@ -121,13 +107,80 @@ impl<'s> Lexer<'s> {
         Ok(())
     }
 
-    fn lex_single(&mut self, kind: TokenKind) -> Result<(), Report> {
+    fn lex_single(&mut self, kind: TokenKind) -> LexResult<()> {
         self.advance()?;
         self.add_token(kind);
         Ok(())
     }
 
-    fn lex_bracket(&mut self, kind: TokenKind) -> Result<(), Report> {
+    fn lex_assignment(&mut self) -> LexResult<()> {
+        self.advance()?;
+        let token = if self.advance_if_next_is('/')? {
+            TokenKind::EqualSlash
+        } else {
+            TokenKind::Equal
+        };
+
+        self.add_token(token);
+
+        Ok(())
+    }
+
+    fn lex_comment(&mut self) -> LexResult<()> {
+        while let Some(peeked) = self.next {
+            if peeked != '\n' && !self.is_at_end() {
+                self.advance()?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn lex_eol(&mut self) -> LexResult<()> {
+        // check for \r\n on windows
+        if self.advance_if_next_is('\r')? {
+            if !self.advance_if_next_is('\n')? {
+                return Err(Report::new(
+                    ReportKind::InternalLexerError,
+                    None,
+                    self.current_line.into(),
+                ));
+            }
+        } else {
+            self.advance()?;
+        }
+
+        // update current line for nicely reporting errors
+        if let Some(index) = self.src[self.token_end.offset..].find('\n') {
+            self.current_line = &self.src[self.token_end.offset..index + self.token_end.offset]
+        } else {
+            self.current_line = &self.src[self.token_end.offset..]
+        };
+
+        // update line and column pointers on \n
+        self.token_end.column = 1;
+        self.token_end.line += 1;
+
+        // flush token start
+        self.token_start = self.token_end.clone();
+
+        Ok(())
+    }
+
+    fn lex_whitespace(&mut self) -> LexResult<()> {
+        while self.next_is_whitespace() {
+            self.advance()?;
+        }
+
+        // flush token start
+        self.token_start = self.token_end.clone();
+
+        Ok(())
+    }
+
+    fn lex_bracket(&mut self, kind: TokenKind) -> LexResult<()> {
         match kind {
             TokenKind::LeftParen => self.open_bracket(TokenKind::Paren),
             TokenKind::RightParen => self.close_bracket(TokenKind::Paren)?,
@@ -149,7 +202,7 @@ impl<'s> Lexer<'s> {
         self.open_brackets.push(kind)
     }
 
-    fn close_bracket(&mut self, kind: TokenKind) -> Result<(), Report> {
+    fn close_bracket(&mut self, kind: TokenKind) -> LexResult<()> {
         match self.open_brackets.pop() {
             Some(open) if open == kind => Ok(()),
             Some(_) => {
@@ -173,7 +226,7 @@ impl<'s> Lexer<'s> {
         }
     }
 
-    fn advance(&mut self) -> Result<(), Report> {
+    fn advance(&mut self) -> LexResult<()> {
         match self.next {
             Some(c) => {
                 let len_utf8 = c.len_utf8();
@@ -193,8 +246,21 @@ impl<'s> Lexer<'s> {
         }
     }
 
+    fn advance_if_next_is(&mut self, c: char) -> LexResult<bool> {
+        if self.next_is(c) {
+            self.advance()?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
     fn next_is(&self, c: char) -> bool {
         self.next == Some(c)
+    }
+
+    fn next_is_whitespace(&self) -> bool {
+        self.next_is(' ') || self.next_is('\t')
     }
 
     fn rest(&self) -> &'s str {
@@ -227,7 +293,7 @@ mod tests {
 
     #[test]
     fn parse_tokens() {
-        let source = "[]]";
+        let source = "* ;ignore me\n * =/=*";
 
         let mut lexer = Lexer::new(source);
 
@@ -247,24 +313,4 @@ mod tests {
             }
         }
     }
-
-    // #[test]
-    // fn parse_tokens_with_comments() {
-    //     let source: String = "= =/ ;;IGNORE\n ;IGNORE / [] \n *".into();
-    //
-    //     let mut lexer = Lexer::new(source);
-    //
-    //     match lexer.scan_tokens() {
-    //         Ok(tokens) => {
-    //             for t in tokens {
-    //                 println!("{t}")
-    //             }
-    //         }
-    //         Err(reports) => {
-    //             for report in reports {
-    //                 println!("{report}")
-    //             }
-    //         }
-    //     }
-    // }
 }

@@ -5,9 +5,9 @@ pub enum TokenKind {
     Equal,
     Dot,
     Star,
-    Semicolon,
     Mod,
     Minus,
+    Slash,
 
     Paren,
     LeftParen,
