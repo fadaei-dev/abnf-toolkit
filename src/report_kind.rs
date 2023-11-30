@@ -3,10 +3,16 @@ use strum_macros::Display;
 #[derive(Display)]
 pub enum ReportKind {
     UnableToParseError,
-    UnclosedBracketError,
     InternalLexerError,
+    EofError,
+
+    // bracket errors
+    UnclosedBracketError,
     MismatchedClosingBracketError,
     UnexpectedClosingBracketError,
+
+    // terminal errors
+    NoTerminalFoundError,
 }
 
 impl ReportKind {
@@ -16,9 +22,11 @@ impl ReportKind {
         match &self {
             UnableToParseError => "lexer was unable to tokenize file",
             InternalLexerError => "you should never see this error",
+            EofError => "reached end of file before complete expression",
             MismatchedClosingBracketError => "one or more brackets are never closed",
             UnexpectedClosingBracketError => "unexpected closing bracket",
             UnclosedBracketError => "one or more brackets are never closed",
+            NoTerminalFoundError => "expected terminal (b, d, x) after %, none found"
         }
     }
 }
