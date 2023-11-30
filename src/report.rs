@@ -4,7 +4,7 @@ use strum_macros::Display;
 #[derive(Display)]
 pub enum ReportKind {
     UnableToParseError,
-    UnkownTokenError,
+    UnclosedBracketError,
     InternalLexerError,
     MismatchedClosingBracketError,
     UnexpectedClosingBracketError,
@@ -16,10 +16,10 @@ impl ReportKind {
 
         match &self {
             UnableToParseError => "lexer was unable to tokenize file",
-            UnkownTokenError => "cannot lex token",
             InternalLexerError => "you should never see this error",
             MismatchedClosingBracketError => "one or more brackets are never closed",
             UnexpectedClosingBracketError => "unexpected closing bracket",
+            UnclosedBracketError => "one or more brackets are never closed",
         }
     }
 }
@@ -53,14 +53,14 @@ impl std::fmt::Display for Report {
 
                 write!(
                     f,
-                    "ERROR -- on Line {} at char {}: \n\n\
+                    "ERROR -- on Line {} at char {}: \n\
                     {}\n\
-                    {:>col$}\n\n\
-                    {} -- {}",
+                    {:>col$}\n\
+                    {} -- {}\n",
                     pos.line, pos.column, self.line, "^", self.kind, self.msg
                 )
             }
-            None => write!(f, "{} -- {}", self.kind, self.msg),
+            None => write!(f, "ERROR -- {} -- {}\n", self.kind, self.msg),
         }
     }
 }
