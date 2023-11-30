@@ -1,5 +1,6 @@
 use crate::position::Position;
-use crate::report::{Report, ReportKind};
+use crate::report::Report;
+use crate::report_kind::ReportKind;
 use crate::token::Token;
 use crate::token_kind::TokenKind;
 
@@ -82,14 +83,15 @@ impl<'s> Lexer<'s> {
             ')' => self.lex_bracket(TokenKind::RightParen)?,
             '[' => self.lex_bracket(TokenKind::LeftSquare)?,
             ']' => self.lex_bracket(TokenKind::RightSquare)?,
-            
+
             '.' => self.lex_single(TokenKind::Dot)?,
-            '-' => self.lex_single(TokenKind::Minus)?,
+            '-' => self.lex_single(TokenKind::Range)?,
             '*' => self.lex_single(TokenKind::Star)?,
             '/' => self.lex_single(TokenKind::Slash)?,
 
             '=' => self.lex_assignment()?,
             ';' => self.lex_comment()?,
+            '%' => self.lex_terminal()?,
 
             ' ' | '\t' => self.lex_whitespace()?,
             '\n' | '\r' => self.lex_eol()?,
@@ -111,6 +113,34 @@ impl<'s> Lexer<'s> {
         self.advance()?;
         self.add_token(kind);
         Ok(())
+    }
+
+    fn lex_terminal(&mut self) -> LexResult<()> {
+        self.lex_single(TokenKind::Mod)?;
+
+        let terminal = match self.next {
+            None => {
+                return Err(Report::new(
+                    ReportKind::EofError,
+                    Some(self.token_end.clone()),
+                    self.current_line.into(),
+                ))
+            }
+            Some(terminal) => match terminal {
+                'b' => TokenKind::TerminalBinary,
+                'd' => TokenKind::TerminalDecimal,
+                'x' => TokenKind::TerminalHexadecimal,
+                _ => {
+                    return Err(Report::new(
+                        ReportKind::NoTerminalFoundError,
+                        None,
+                        self.current_line.into(),
+                    ))
+                }
+            },
+        };
+
+        self.lex_single(terminal)
     }
 
     fn lex_assignment(&mut self) -> LexResult<()> {
@@ -293,7 +323,7 @@ mod tests {
 
     #[test]
     fn parse_tokens() {
-        let source = "* ;ignore me\n * =/=*";
+        let source = "* %";
 
         let mut lexer = Lexer::new(source);
 
