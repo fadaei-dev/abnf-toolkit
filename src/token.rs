@@ -1,7 +1,7 @@
 use crate::position::Position;
 use crate::token_kind::TokenKind;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Token<'s> {
     pub kind: TokenKind,
     pub pos: Position,

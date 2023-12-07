@@ -94,13 +94,17 @@ impl<'s> Lexer<'s> {
             '=' => self.lex_assignment()?,
             ';' => self.lex_comment()?,
             '%' => self.lex_terminal()?,
-            '"' => self.lex_string()?,
 
+            '"' => self.lex_string_literal()?,
+            _ if start.is_ascii_digit() => self.lex_number_literal(TokenKind::Number)?,
+            // _ if start.is_ascii_alphabetic() => self.lex_identifier()?,
             ' ' | '\t' => self.lex_whitespace()?,
             '\n' | '\r' => self.lex_eol()?,
 
             _ => {
                 self.advance()?; // continue lexing
+                println!("HERERJNKREJN");
+
                 return Err(Report::new(
                     ReportKind::UnableToParseError,
                     None,
@@ -112,7 +116,43 @@ impl<'s> Lexer<'s> {
         Ok(())
     }
 
-    fn lex_string(&mut self) -> LexResult<()> {
+    fn lex_string_literal(&mut self) -> LexResult<()> {
+        self.advance()?;
+        while let Some(peeked) = self.next {
+            if peeked != '"' && !self.is_at_end() {
+                self.advance()?;
+            } else {
+                break;
+            }
+        }
+
+        if self.is_at_end() {
+            return Err(Report::new(
+                ReportKind::UnterminatedStringError,
+                Some(self.token_start.clone()),
+                self.current_line.into(),
+            ));
+        }
+
+        self.advance()?; // grab string terminator
+        self.add_token(TokenKind::String);
+        Ok(())
+    }
+
+    fn lex_number_literal(&mut self, kind: TokenKind) -> LexResult<()> {
+        while let Some(peeked) = self.next {
+            if peeked.is_ascii_digit() && !self.is_at_end() {
+                self.advance()?;
+            } else {
+                break;
+            }
+        }
+
+        self.add_token(kind);
+        Ok(())
+    }
+
+    fn lex_identifier(&mut self) -> LexResult<()> {
         todo!()
     }
 
@@ -173,23 +213,7 @@ impl<'s> Lexer<'s> {
     // TODO: in parser check lexeme to be in range 0..=127
     fn lex_terminal_decimal(&mut self) -> LexResult<()> {
         self.advance()?;
-
-        while let Some(peeked) = self.next {
-            if peeked != '\n'
-                && peeked != '.'
-                && peeked != ' '
-                && peeked != '\t'
-                && !self.is_at_end()
-            {
-                self.advance()?;
-            } else {
-                break;
-            }
-        }
-
-        self.add_token(TokenKind::Decimal);
-
-        Ok(())
+        self.lex_number_literal(TokenKind::Decimal)
     }
 
     fn lex_assignment(&mut self) -> LexResult<()> {
@@ -371,26 +395,96 @@ impl<'s> Lexer<'s> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn parse_tokens() {
-        let source = "*  %d45 %d66.%d99 %d606\t";
+    macro_rules! test {
+        {
+            name:   $name:ident,
+            text:   $text:expr,
+            tokens: ($($kind:expr),*)
+        } => {
+            #[test]
+            fn $name() {
+                let kinds: &[TokenKind] = &[$($kind,)* TokenKind::EOF];
 
-        let mut lexer = Lexer::new(source);
+                test($text, kinds);
+            }
+
+        };
+    }
+
+    fn test(text: &str, want_kinds: &[TokenKind]) {
+        let mut lexer = Lexer::new(text);
 
         match lexer.tokenize() {
             Ok(tokens) => {
-                assert_eq!(tokens[0].kind, TokenKind::Star);
-                assert_eq!(tokens[0].pos.line, 1);
+                let have_kinds = tokens
+                    .iter()
+                    .map(|t| t.kind.clone())
+                    .collect::<Vec<TokenKind>>();
 
-                for t in tokens {
-                    println!("{t}");
-                }
+                assert_eq!(have_kinds, want_kinds);
             }
-            Err(reports) => {
-                for e in reports {
-                    println!("{e}")
-                }
+            Err(_err) => {
+                panic!("oopsies")
             }
         }
     }
+
+    test! {
+        name: char_delim_paren,
+        text: "()",
+        tokens: (TokenKind::LeftParen, TokenKind::RightParen)
+    }
+
+    test! {
+        name: char_delim_square,
+        text: "[]",
+        tokens: (TokenKind::LeftSquare, TokenKind::RightSquare)
+    }
+
+    test! {
+        name: char_delim_angle,
+        text: "<>",
+        tokens: (TokenKind::LeftAngle, TokenKind::RightAngle)
+    }
+
+    test! {
+        name: char_dot,
+        text: ".",
+        tokens: (TokenKind::Dot)
+    }
+
+    test! {
+        name: char_range,
+        text: "-",
+        tokens: (TokenKind::Range)
+    }
+
+    test! {
+        name: char_star,
+        text: "*",
+        tokens: (TokenKind::Star)
+    }
+
+    test! {
+        name: char_slash,
+        text: "/",
+        tokens: (TokenKind::Slash)
+    }
+
+    test! {
+        name: char_equal,
+        text: "=",
+        tokens: (TokenKind::Equal)
+    }
+
+    test! {
+        name: char_equal_slash,
+        text: "=/",
+        tokens: (TokenKind::EqualSlash)
+    }
+
+    // test! {
+    //     name: terminal_decimal,
+    //     text: "%d"
+    // }
 }
