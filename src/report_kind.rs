@@ -1,6 +1,6 @@
 use strum_macros::Display;
 
-#[derive(Display)]
+#[derive(Display, Debug, PartialEq, Clone)]
 pub enum ReportKind {
     UnableToParseError,
     InternalLexerError,
@@ -14,9 +14,12 @@ pub enum ReportKind {
     // terminal errors
     NoTerminalFoundError,
     IncorrectTerminalFoundError,
+    BinaryTerminalError,
+    DecimalTerminalError,
 
     // literal errors
-    UnterminatedStringError
+    UnterminatedStringError,
+    NaNError,
 }
 
 impl ReportKind {
@@ -32,8 +35,10 @@ impl ReportKind {
             UnclosedBracketError => "one or more brackets are never closed",
             NoTerminalFoundError => "expected terminal (b, d, x) after %, found none",
             IncorrectTerminalFoundError => "expected terminal (b, d, x) after %",
-            UnterminatedStringError => "string was never closed"
+            BinaryTerminalError => "expected binary representation (0, 1)",
+            DecimalTerminalError => "decimal terminal should be in range 0..=127",
+            UnterminatedStringError => "string was never closed",
+            NaNError => "expected a number",
         }
     }
 }
-

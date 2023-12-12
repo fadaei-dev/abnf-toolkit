@@ -24,6 +24,7 @@ pub enum TokenKind {
 
     // Mods
     TerminalBinary,
+    Binary,
     TerminalDecimal,
     Decimal,
     TerminalHexadecimal,

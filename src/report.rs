@@ -1,6 +1,7 @@
 use crate::position::Position;
 use crate::report_kind::ReportKind;
 
+#[derive(Debug)]
 pub struct Report {
     kind: ReportKind,
     msg: &'static str,
@@ -20,6 +21,10 @@ impl Report {
             line,
         }
     }
+
+    pub fn get_kind(&self) -> ReportKind {
+        self.kind.clone()
+    }
 }
 
 impl std::fmt::Display for Report {
@@ -30,11 +35,10 @@ impl std::fmt::Display for Report {
 
                 write!(
                     f,
-                    "ERROR -- on Line {} at char {}: \n\
+                    "ERROR -- on Line {} at char {}: {} -- {}\n\
                     {}\n\
-                    {:>col$}\n\
-                    {} -- {}\n",
-                    pos.line, pos.column, self.line, "^", self.kind, self.msg
+                    {:>col$}",
+                    pos.line, pos.column, self.kind, self.msg, self.line, "^", 
                 )
             }
             None => write!(f, "ERROR -- {} -- {}\n", self.kind, self.msg),

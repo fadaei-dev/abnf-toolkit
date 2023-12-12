@@ -14,7 +14,12 @@ pub fn run() {
 
                 match lexer.tokenize() {
                     Ok(_tokens) => println!("Tokens"),
-                    Err(_err) => println!("Errors"),
+                    Err(err) => {
+                        println!("-The following syntax errors where found:-");
+                        for e in err {
+                            println!("{e}");
+                        }
+                    }
                 }
             }
             Err(_err) => println!("Errors"),

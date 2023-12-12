@@ -69,7 +69,6 @@ impl<'s> Lexer<'s> {
             ))
         }
 
-        // if we have errors, keep parsing and return all errors
         if !reports.is_empty() {
             return Err(reports);
         }
@@ -95,15 +94,14 @@ impl<'s> Lexer<'s> {
             ';' => self.lex_comment()?,
             '%' => self.lex_terminal()?,
 
-            '"' => self.lex_string_literal()?,
-            _ if start.is_ascii_digit() => self.lex_number_literal(TokenKind::Number)?,
-            // _ if start.is_ascii_alphabetic() => self.lex_identifier()?,
             ' ' | '\t' => self.lex_whitespace()?,
             '\n' | '\r' => self.lex_eol()?,
 
+            '"' => self.lex_string_literal()?,
+            _ if start.is_ascii_digit() => self.lex_number_literal(TokenKind::Number)?,
+            // _ if start.is_ascii_alphabetic() => self.lex_identifier()?,
             _ => {
                 self.advance()?; // continue lexing
-                println!("HERERJNKREJN");
 
                 return Err(Report::new(
                     ReportKind::UnableToParseError,
@@ -197,23 +195,78 @@ impl<'s> Lexer<'s> {
         self.lex_single(terminal.clone())?;
 
         match terminal {
-            TokenKind::TerminalBinary => todo!(),
+            TokenKind::TerminalBinary => self.lex_terminal_binary()?,
             TokenKind::TerminalDecimal => self.lex_terminal_decimal()?,
-            TokenKind::TerminalHexadecimal => todo!(),
-            _ => (),
+            TokenKind::TerminalHexadecimal => self.lex_terminal_hexadecimal()?,
+            _ => unreachable!(),
         };
 
         Ok(())
     }
 
     fn lex_terminal_binary(&mut self) -> LexResult<()> {
-        todo!()
+        self.lex_number_literal(TokenKind::Binary)?;
+
+        // else should never happen
+        // check for binary
+        if let Some(last) = self.tokens.last() {
+            for c in last.get_lexeme().chars() {
+                if c != '0' && c != '1' {
+                    return Err(Report::new(
+                        ReportKind::BinaryTerminalError,
+                        Some(self.token_end.clone()),
+                        self.current_line.into(),
+                    ));
+                }
+            }
+        } else {
+            return Err(Report::new(
+                ReportKind::InternalLexerError,
+                None,
+                self.current_line.into(),
+            ));
+        }
+
+        Ok(())
     }
 
-    // TODO: in parser check lexeme to be in range 0..=127
     fn lex_terminal_decimal(&mut self) -> LexResult<()> {
-        self.advance()?;
-        self.lex_number_literal(TokenKind::Decimal)
+        self.lex_number_literal(TokenKind::Decimal)?;
+
+        if let Some(last) = self.tokens.last() {
+            let n = last.get_lexeme().parse::<i32>();
+
+            match n {
+                Ok(num) => {
+                    if num < 0 || num > 127 {
+                        return Err(Report::new(
+                            ReportKind::DecimalTerminalError,
+                            Some(self.token_end.clone()),
+                            self.current_line.into(),
+                        ));
+                    }
+                }
+                Err(_err) => {
+                    return Err(Report::new(
+                        ReportKind::NaNError,
+                        Some(self.token_end.clone()),
+                        self.current_line.into(),
+                    ))
+                }
+            }
+        } else {
+            return Err(Report::new(
+                ReportKind::InternalLexerError,
+                None,
+                self.current_line.into(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn lex_terminal_hexadecimal(&mut self) -> LexResult<()> {
+        todo!()
     }
 
     fn lex_assignment(&mut self) -> LexResult<()> {
@@ -405,13 +458,32 @@ mod tests {
             fn $name() {
                 let kinds: &[TokenKind] = &[$($kind,)* TokenKind::EOF];
 
-                test($text, kinds);
+                test($text, Some(kinds), None, false);
             }
-
         };
     }
 
-    fn test(text: &str, want_kinds: &[TokenKind]) {
+    macro_rules! error {
+        {
+            name:   $name:ident,
+            text:   $text:expr,
+            errors:  ($($kind:expr),*)
+        } => {
+            #[test]
+            fn $name() {
+                let kinds: &[ReportKind] = &[$($kind,)*];
+
+                test($text, None, Some(kinds), true);
+            }
+        }
+    }
+
+    fn test(
+        text: &str,
+        want_kinds: Option<&[TokenKind]>,
+        want_report_kinds: Option<&[ReportKind]>,
+        expect_error: bool,
+    ) {
         let mut lexer = Lexer::new(text);
 
         match lexer.tokenize() {
@@ -421,10 +493,28 @@ mod tests {
                     .map(|t| t.kind.clone())
                     .collect::<Vec<TokenKind>>();
 
-                assert_eq!(have_kinds, want_kinds);
+                // safe unwrap as it is a guarantee
+                assert_eq!(have_kinds, want_kinds.unwrap(), "{have_kinds:?}");
             }
-            Err(_err) => {
-                panic!("oopsies")
+            Err(err) => {
+                if !expect_error {
+                    for e in err {
+                        println!("{e}");
+                    }
+                    panic!("== test produces errors, run test command with --nocapture to see output ==")
+                }
+
+                let have_report_kinds = err
+                    .iter()
+                    .map(|r| r.get_kind())
+                    .collect::<Vec<ReportKind>>();
+
+                // safe unwrap
+                assert_eq!(
+                    have_report_kinds,
+                    want_report_kinds.unwrap(),
+                    "{have_report_kinds:?}"
+                )
             }
         }
     }
@@ -483,8 +573,57 @@ mod tests {
         tokens: (TokenKind::EqualSlash)
     }
 
-    // test! {
-    //     name: terminal_decimal,
-    //     text: "%d"
-    // }
+    test! {
+        name: char_whitespace,
+        text: " ",
+        tokens: (TokenKind::Whitespace)
+    }
+
+    test! {
+        name: newline_safe,
+        text: "*\n-\n=/\n=",
+        tokens: (TokenKind::Star, TokenKind::Range, TokenKind::EqualSlash, TokenKind::Equal)
+    }
+
+    test! {
+        name: comment_ignored,
+        text: "=; = = * *\n*",
+        tokens: (TokenKind::Equal, TokenKind::Star)
+    }
+
+    test! {
+        name: terminal_decimal,
+        text: "%d50",
+        tokens: (TokenKind::Mod, TokenKind::TerminalDecimal, TokenKind::Decimal)
+    }
+
+    error! {
+        name: decimal_terminal_error,
+        text: "%d128",
+        errors: (ReportKind::DecimalTerminalError)
+    }
+
+    test! {
+        name: terminal_binary,
+        text: "%b110",
+        tokens: (TokenKind::Mod, TokenKind::TerminalBinary, TokenKind::Binary)
+    }
+
+    error! {
+        name: binary_terminal_error,
+        text: "%b10013",
+        errors: (ReportKind::BinaryTerminalError)
+    }
+
+    test! {
+        name: string_literal,
+        text: "\"string\"",
+        tokens: (TokenKind::String)
+    }
+
+    error! {
+        name: unterminated_string_error,
+        text: "\"unterminated string",
+        errors: (ReportKind::UnterminatedStringError)
+    }
 }
