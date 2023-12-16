@@ -160,7 +160,7 @@ impl<'s> Lexer<'s> {
     fn lex_identifier(&mut self) -> LexResult<()> {
         self.advance()?;
         while let Some(c) = self.next {
-            if !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9') {
+            if !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9'| '-') {
                 break;
             }
             self.advance()?;
@@ -302,9 +302,21 @@ impl<'s> Lexer<'s> {
                 self.advance()?;
                 self.advance()?;
 
+                if self.config.extended {
+                    loop {
+                        if let Some(n) = self.next {
+                            match u32::from_str_radix(&n.to_string(), 16) {
+                                Ok(_) => self.advance()?,
+                                Err(_) => break,
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
                 self.add_token(TokenKind::Hexadecimal);
 
-                if hex > 126 {
+                if hex > 126 && !self.config.extended {
                     return Err(Report::new(
                         ReportKind::HexadecimalTerminalError,
                         Some(self.token_end.clone()),
