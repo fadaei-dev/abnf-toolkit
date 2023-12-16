@@ -98,16 +98,19 @@ impl<'s> Lexer<'s> {
             '\n' | '\r' => self.lex_eol()?,
 
             '"' => self.lex_string_literal()?,
+
             _ if start.is_ascii_digit() => self.lex_number_literal(TokenKind::Number)?,
-            // _ if start.is_ascii_alphabetic() => self.lex_identifier()?,
+            _ if start.is_ascii_alphabetic() => self.lex_identifier()?,
             _ => {
                 self.advance()?; // continue lexing
 
-                return Err(Report::new(
-                    ReportKind::UnableToParseError,
-                    None,
-                    self.current_line.into(),
-                ));
+                if self.is_at_end() {
+                    return Err(Report::new(
+                        ReportKind::UnableToParseError,
+                        Some(self.token_end.clone()),
+                        self.current_line.into(),
+                    ));
+                }
             }
         };
 
@@ -115,7 +118,7 @@ impl<'s> Lexer<'s> {
     }
 
     fn lex_string_literal(&mut self) -> LexResult<()> {
-        self.advance()?;
+        self.advance()?; // get first "
         while let Some(peeked) = self.next {
             if peeked != '"' && !self.is_at_end() {
                 self.advance()?;
@@ -151,7 +154,16 @@ impl<'s> Lexer<'s> {
     }
 
     fn lex_identifier(&mut self) -> LexResult<()> {
-        todo!()
+        self.advance()?;
+        while let Some(c) = self.next {
+            if !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9') {
+                break;
+            }
+            self.advance()?;
+        }
+
+        self.add_token(TokenKind::Identifier);
+        Ok(())
     }
 
     fn lex_single(&mut self, kind: TokenKind) -> LexResult<()> {
@@ -197,7 +209,7 @@ impl<'s> Lexer<'s> {
         match terminal {
             TokenKind::TerminalBinary => self.lex_terminal_binary()?,
             TokenKind::TerminalDecimal => self.lex_terminal_decimal()?,
-            TokenKind::TerminalHexadecimal => self.lex_terminal_hexadecimal()?,
+            TokenKind::TerminalHexadecimal => todo!(),
             _ => unreachable!(),
         };
 
@@ -207,9 +219,15 @@ impl<'s> Lexer<'s> {
     fn lex_terminal_binary(&mut self) -> LexResult<()> {
         self.lex_number_literal(TokenKind::Binary)?;
 
-        // else should never happen
         // check for binary
         if let Some(last) = self.tokens.last() {
+            if last.length != 7 {
+                return Err(Report::new(
+                    ReportKind::SevenBitsError,
+                    Some(self.token_end.clone()),
+                    self.current_line.into(),
+                ));
+            }
             for c in last.get_lexeme().chars() {
                 if c != '0' && c != '1' {
                     return Err(Report::new(
@@ -238,7 +256,7 @@ impl<'s> Lexer<'s> {
 
             match n {
                 Ok(num) => {
-                    if num < 0 || num > 127 {
+                    if num < 0 || num > 126 {
                         return Err(Report::new(
                             ReportKind::DecimalTerminalError,
                             Some(self.token_end.clone()),
@@ -265,9 +283,15 @@ impl<'s> Lexer<'s> {
         Ok(())
     }
 
-    fn lex_terminal_hexadecimal(&mut self) -> LexResult<()> {
-        todo!()
-    }
+    //UGLY
+    // fn lex_terminal_hexadecimal(&mut self) -> LexResult<()> {
+    //     if self.advance_if_next_is_in_range('0'..='7') {
+    //         self.advance()?;
+    //         self.add_token(TokenKind::Hexadecimal);
+    //
+    //
+    //     }
+    // }
 
     fn lex_assignment(&mut self) -> LexResult<()> {
         self.advance()?;
@@ -396,7 +420,7 @@ impl<'s> Lexer<'s> {
                 Ok(())
             }
             None => Err(Report::new(
-                ReportKind::UnableToParseError,
+                ReportKind::UnableToAdvanceError,
                 None,
                 self.current_line.into(),
             )),
@@ -404,9 +428,20 @@ impl<'s> Lexer<'s> {
     }
 
     fn advance_if_next_is(&mut self, c: char) -> LexResult<bool> {
-        if self.next_is(c) {
-            self.advance()?;
-            Ok(true)
+        self.advance_if_next_is_in_range(c..=c)
+    }
+
+    fn advance_if_next_is_in_range(
+        &mut self,
+        range: std::ops::RangeInclusive<char>,
+    ) -> LexResult<bool> {
+        if let Some(c) = self.next {
+            if range.contains(&c) {
+                self.advance()?;
+                Ok(true)
+            } else {
+                Ok(false)
+            }
         } else {
             Ok(false)
         }
@@ -603,16 +638,28 @@ mod tests {
         errors: (ReportKind::DecimalTerminalError)
     }
 
+    // error! {
+    //     name: decimal_nan_error,
+    //     text: "%dk",
+    //     errors: (ReportKind::NaNError)
+    // }
+
     test! {
         name: terminal_binary,
-        text: "%b110",
+        text: "%b1100110",
         tokens: (TokenKind::Mod, TokenKind::TerminalBinary, TokenKind::Binary)
     }
 
     error! {
         name: binary_terminal_error,
-        text: "%b10013",
+        text: "%b1001302",
         errors: (ReportKind::BinaryTerminalError)
+    }
+
+    error! {
+        name: binary_seven_bits_error,
+        text: "%b110",
+        errors: (ReportKind::SevenBitsError)
     }
 
     test! {

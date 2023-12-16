@@ -28,6 +28,7 @@ pub enum TokenKind {
     TerminalDecimal,
     Decimal,
     TerminalHexadecimal,
+    Hexadecimal,
 
     // Literal TokenTypes
     String,

@@ -13,7 +13,11 @@ pub fn run() {
                 let mut lexer = Lexer::new(&source);
 
                 match lexer.tokenize() {
-                    Ok(_tokens) => println!("Tokens"),
+                    Ok(tokens) => {
+                        for t in tokens {
+                            println!("{t}");
+                        }
+                    }
                     Err(err) => {
                         println!("-The following syntax errors where found:-");
                         for e in err {
