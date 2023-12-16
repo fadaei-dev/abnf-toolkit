@@ -10,4 +10,8 @@ use std::path::PathBuf;
 pub struct Cli {
     /// path to abnf file
     pub file: Option<PathBuf>,
+
+    /// Sets a custom config file
+    #[arg(short, long, value_name = "TOML")]
+    pub config: Option<PathBuf>,
 }

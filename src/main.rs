@@ -1,4 +1,5 @@
 mod cli;
+mod config;
 mod lexer;
 mod position;
 mod report;

@@ -11,3 +11,6 @@ substring = "1.4.5"
 strum = { version = "0.25", features = ["derive"] }
 strum_macros = "0.25"
 owo-colors = "3.5.0"
+directories = "5.0"
+serde = { version="1.0.193", features = ["derive"]}
+toml = "0.8.8"

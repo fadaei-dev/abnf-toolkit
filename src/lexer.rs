@@ -1,3 +1,4 @@
+use crate::config::LexerConfig;
 use crate::position::Position;
 use crate::report::Report;
 use crate::report_kind::ReportKind;
@@ -18,10 +19,12 @@ pub struct Lexer<'s> {
     current_line: &'s str,
 
     open_brackets: Vec<TokenKind>,
+
+    config: LexerConfig,
 }
 
 impl<'s> Lexer<'s> {
-    pub fn new(source: &'s str) -> Self {
+    pub fn new(source: &'s str, config: LexerConfig) -> Self {
         let mut chars = source.chars();
         let next = chars.next();
 
@@ -41,6 +44,7 @@ impl<'s> Lexer<'s> {
             current_line: &source[..index],
             chars,
             next,
+            config,
         }
     }
 
@@ -256,7 +260,7 @@ impl<'s> Lexer<'s> {
 
             match n {
                 Ok(num) => {
-                    if num < 0 || num > 126 {
+                    if num < 0 || num > 126 && !self.config.extended {
                         return Err(Report::new(
                             ReportKind::DecimalTerminalError,
                             Some(self.token_end.clone()),
