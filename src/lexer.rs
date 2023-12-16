@@ -1,3 +1,4 @@
+use crate::config::LexerConfig;
 use crate::position::Position;
 use crate::report::Report;
 use crate::report_kind::ReportKind;
@@ -18,10 +19,12 @@ pub struct Lexer<'s> {
     current_line: &'s str,
 
     open_brackets: Vec<TokenKind>,
+
+    config: LexerConfig,
 }
 
 impl<'s> Lexer<'s> {
-    pub fn new(source: &'s str) -> Self {
+    pub fn new(source: &'s str, config: LexerConfig) -> Self {
         let mut chars = source.chars();
         let next = chars.next();
 
@@ -41,6 +44,7 @@ impl<'s> Lexer<'s> {
             current_line: &source[..index],
             chars,
             next,
+            config,
         }
     }
 
@@ -156,7 +160,7 @@ impl<'s> Lexer<'s> {
     fn lex_identifier(&mut self) -> LexResult<()> {
         self.advance()?;
         while let Some(c) = self.next {
-            if !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9') {
+            if !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9'| '-') {
                 break;
             }
             self.advance()?;
@@ -256,7 +260,7 @@ impl<'s> Lexer<'s> {
 
             match n {
                 Ok(num) => {
-                    if num < 0 || num > 126 {
+                    if num < 0 || num > 126 && !self.config.extended {
                         return Err(Report::new(
                             ReportKind::DecimalTerminalError,
                             Some(self.token_end.clone()),
@@ -298,9 +302,21 @@ impl<'s> Lexer<'s> {
                 self.advance()?;
                 self.advance()?;
 
+                if self.config.extended {
+                    loop {
+                        if let Some(n) = self.next {
+                            match u32::from_str_radix(&n.to_string(), 16) {
+                                Ok(_) => self.advance()?,
+                                Err(_) => break,
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
                 self.add_token(TokenKind::Hexadecimal);
 
-                if hex > 126 {
+                if hex > 126 && !self.config.extended {
                     return Err(Report::new(
                         ReportKind::HexadecimalTerminalError,
                         Some(self.token_end.clone()),
