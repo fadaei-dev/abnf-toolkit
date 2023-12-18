@@ -219,6 +219,10 @@ impl<'s> Lexer<'s> {
     fn lex_terminal_binary(&mut self) -> LexResult<()> {
         self.lex_number_literal(TokenKind::Binary)?;
 
+        if self.advance_if_next_is('-')? || self.advance_if_next_is('.')? {
+            self.lex_terminal_binary()?;
+        }
+
         // check for binary
         if let Some(last) = self.tokens.last() {
             if last.length != 7 {
@@ -250,6 +254,10 @@ impl<'s> Lexer<'s> {
 
     fn lex_terminal_decimal(&mut self) -> LexResult<()> {
         self.lex_number_literal(TokenKind::Decimal)?;
+
+        if self.advance_if_next_is('-')? || self.advance_if_next_is('.')? {
+            self.lex_terminal_decimal()?;
+        }
 
         if let Some(last) = self.tokens.last() {
             let n = last.get_lexeme().parse::<i32>();
