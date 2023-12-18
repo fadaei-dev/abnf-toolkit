@@ -1,1 +1,2 @@
-%x7F
+rulename = cln "hello"
+rulename =/ cln "bye"

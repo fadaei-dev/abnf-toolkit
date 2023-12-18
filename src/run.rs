@@ -1,6 +1,6 @@
-use crate::config::{load_config, Config};
+use crate::cli;
+use crate::config::load_config;
 use crate::lexer::Lexer;
-use crate::{cli, config};
 use clap::Parser;
 use std::fs;
 

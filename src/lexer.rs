@@ -223,7 +223,8 @@ impl<'s> Lexer<'s> {
     fn lex_terminal_binary(&mut self) -> LexResult<()> {
         self.lex_number_literal(TokenKind::Binary)?;
 
-        if self.advance_if_next_is('-')? || self.advance_if_next_is('.')? {
+        if self.next_is('-') || self.next_is('.') {
+            self.lex_single(TokenKind::Range)?;
             self.lex_terminal_binary()?;
         }
 
@@ -259,7 +260,8 @@ impl<'s> Lexer<'s> {
     fn lex_terminal_decimal(&mut self) -> LexResult<()> {
         self.lex_number_literal(TokenKind::Decimal)?;
 
-        if self.advance_if_next_is('-')? || self.advance_if_next_is('.')? {
+        if self.next_is('-') || self.next_is('.') {
+            self.lex_single(TokenKind::Range)?;
             self.lex_terminal_decimal()?;
         }
 
@@ -323,6 +325,11 @@ impl<'s> Lexer<'s> {
                     }
                 }
                 self.add_token(TokenKind::Hexadecimal);
+
+                if self.next_is('-') || self.next_is('.') {
+                    self.lex_single(TokenKind::Range)?;
+                    self.lex_terminal_hexadecimal()?;
+                }
 
                 if hex > 126 && !self.config.extended {
                     return Err(Report::new(
