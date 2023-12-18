@@ -18,6 +18,8 @@ pub enum ReportKind {
     BinaryTerminalError,
     SevenBitsError,
     DecimalTerminalError,
+    HexadecimalTerminalError,
+    NaHexNError,
 
     // literal errors
     UnterminatedStringError,
@@ -41,8 +43,10 @@ impl ReportKind {
             BinaryTerminalError => "expected binary representation (0, 1)",
             SevenBitsError => "expected 7 bits after terminal received more or less",
             DecimalTerminalError => "decimal terminal should be in range 0..=127",
+            HexadecimalTerminalError => "hexadecimal terminal should be in range 00..=7E",
             UnterminatedStringError => "string was never closed",
             NaNError => "expected a number",
+            NaHexNError => "expected a 2 character hexadecimal",
         }
     }
 }

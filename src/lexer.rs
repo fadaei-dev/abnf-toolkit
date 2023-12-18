@@ -1,3 +1,4 @@
+use crate::config::LexerConfig;
 use crate::position::Position;
 use crate::report::Report;
 use crate::report_kind::ReportKind;
@@ -18,10 +19,12 @@ pub struct Lexer<'s> {
     current_line: &'s str,
 
     open_brackets: Vec<TokenKind>,
+
+    config: LexerConfig,
 }
 
 impl<'s> Lexer<'s> {
-    pub fn new(source: &'s str) -> Self {
+    pub fn new(source: &'s str, config: LexerConfig) -> Self {
         let mut chars = source.chars();
         let next = chars.next();
 
@@ -41,6 +44,7 @@ impl<'s> Lexer<'s> {
             current_line: &source[..index],
             chars,
             next,
+            config,
         }
     }
 
@@ -156,7 +160,7 @@ impl<'s> Lexer<'s> {
     fn lex_identifier(&mut self) -> LexResult<()> {
         self.advance()?;
         while let Some(c) = self.next {
-            if !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9') {
+            if !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9'| '-') {
                 break;
             }
             self.advance()?;
@@ -209,7 +213,7 @@ impl<'s> Lexer<'s> {
         match terminal {
             TokenKind::TerminalBinary => self.lex_terminal_binary()?,
             TokenKind::TerminalDecimal => self.lex_terminal_decimal()?,
-            TokenKind::TerminalHexadecimal => todo!(),
+            TokenKind::TerminalHexadecimal => self.lex_terminal_hexadecimal()?,
             _ => unreachable!(),
         };
 
@@ -264,7 +268,7 @@ impl<'s> Lexer<'s> {
 
             match n {
                 Ok(num) => {
-                    if num < 0 || num > 126 {
+                    if num < 0 || num > 126 && !self.config.extended {
                         return Err(Report::new(
                             ReportKind::DecimalTerminalError,
                             Some(self.token_end.clone()),
@@ -291,15 +295,54 @@ impl<'s> Lexer<'s> {
         Ok(())
     }
 
-    //UGLY
-    // fn lex_terminal_hexadecimal(&mut self) -> LexResult<()> {
-    //     if self.advance_if_next_is_in_range('0'..='7') {
-    //         self.advance()?;
-    //         self.add_token(TokenKind::Hexadecimal);
-    //
-    //
-    //     }
-    // }
+    fn lex_terminal_hexadecimal(&mut self) -> LexResult<()> {
+        let look_ahead = self.rest();
+
+        if look_ahead.len() < 2 {
+            return Err(Report::new(
+                ReportKind::EofError,
+                Some(self.token_end.clone()),
+                self.current_line.into(),
+            ));
+        }
+        match u32::from_str_radix(&look_ahead[..2], 16) {
+            Ok(hex) => {
+                self.advance()?;
+                self.advance()?;
+
+                if self.config.extended {
+                    loop {
+                        if let Some(n) = self.next {
+                            match u32::from_str_radix(&n.to_string(), 16) {
+                                Ok(_) => self.advance()?,
+                                Err(_) => break,
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                self.add_token(TokenKind::Hexadecimal);
+
+                if hex > 126 && !self.config.extended {
+                    return Err(Report::new(
+                        ReportKind::HexadecimalTerminalError,
+                        Some(self.token_end.clone()),
+                        self.current_line.into(),
+                    ));
+                }
+            }
+            Err(_err) => {
+                return Err(Report::new(
+                    ReportKind::NaHexNError,
+                    Some(self.token_end.clone()),
+                    self.current_line.into(),
+                ))
+            }
+        };
+
+        Ok(())
+    }
 
     fn lex_assignment(&mut self) -> LexResult<()> {
         self.advance()?;
@@ -646,11 +689,11 @@ mod tests {
         errors: (ReportKind::DecimalTerminalError)
     }
 
-    // error! {
-    //     name: decimal_nan_error,
-    //     text: "%dk",
-    //     errors: (ReportKind::NaNError)
-    // }
+    error! {
+        name: decimal_nan_error,
+        text: "%dk",
+        errors: (ReportKind::NaNError)
+    }
 
     test! {
         name: terminal_binary,
@@ -668,6 +711,24 @@ mod tests {
         name: binary_seven_bits_error,
         text: "%b110",
         errors: (ReportKind::SevenBitsError)
+    }
+
+    test! {
+        name: hex_binary,
+        text: "%x50",
+        tokens: (TokenKind::Mod, TokenKind::TerminalHexadecimal, TokenKind::Hexadecimal)
+    }
+
+    error! {
+        name: hex_terminal_error,
+        text: "%x80",
+        errors: (ReportKind::HexadecimalTerminalError)
+    }
+
+    error! {
+        name: nahex_error,
+        text: "%xlo\n%x \n",
+        errors: (ReportKind::NaHexNError, ReportKind::NaHexNError)
     }
 
     test! {

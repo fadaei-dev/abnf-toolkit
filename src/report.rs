@@ -1,6 +1,8 @@
 use crate::position::Position;
 use crate::report_kind::ReportKind;
 
+use owo_colors::OwoColorize;
+
 #[derive(Debug)]
 pub struct Report {
     kind: ReportKind,
@@ -35,10 +37,16 @@ impl std::fmt::Display for Report {
 
                 write!(
                     f,
-                    "ERROR -- on Line {} at char {}: {} -- {}\n\
+                    "{} -- on Line {} at char {}: {} -- {}\n\
                     {}\n\
                     {:>col$}",
-                    pos.line, pos.column, self.kind, self.msg, self.line, "^", 
+                    "Error".red(),
+                    pos.line.green(),
+                    pos.column.green(),
+                    self.kind.red(),
+                    self.msg,
+                    self.line,
+                    "^".bold().green(),
                 )
             }
             None => write!(f, "ERROR -- {} -- {}\n", self.kind, self.msg),
